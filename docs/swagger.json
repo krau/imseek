@@ -1,0 +1,517 @@
+{
+    "schemes": [
+        "http",
+        "https"
+    ],
+    "swagger": "2.0",
+    "info": {
+        "description": "Image similarity search service.",
+        "title": "ImSeek API",
+        "contact": {},
+        "version": "1.0"
+    },
+    "basePath": "/api/v1",
+    "paths": {
+        "/health": {
+            "get": {
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ],
+                "description": "Returns service health status.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "system"
+                ],
+                "summary": "Health check",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/images": {
+            "get": {
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ],
+                "description": "Returns a paginated list of image metadata.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "images"
+                ],
+                "summary": "List images",
+                "parameters": [
+                    {
+                        "maximum": 100,
+                        "minimum": 1,
+                        "type": "integer",
+                        "default": 20,
+                        "description": "Items per page (1-100)",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "minimum": 0,
+                        "type": "integer",
+                        "default": 0,
+                        "description": "Number of items to skip",
+                        "name": "offset",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_server.ListImagesResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_server.APIError"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ],
+                "description": "Uploads an image, extracts ORB descriptors, and adds it to the database. Rejects duplicates by content hash.",
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "images"
+                ],
+                "summary": "Upload image",
+                "parameters": [
+                    {
+                        "type": "file",
+                        "description": "Image file (jpg/png/webp, max 50MB)",
+                        "name": "file",
+                        "in": "formData",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Custom path label for the image",
+                        "name": "path",
+                        "in": "formData"
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/internal_server.AddImageResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Missing file field",
+                        "schema": {
+                            "$ref": "#/definitions/internal_server.APIError"
+                        }
+                    },
+                    "409": {
+                        "description": "Image already exists",
+                        "schema": {
+                            "$ref": "#/definitions/internal_server.APIError"
+                        }
+                    },
+                    "422": {
+                        "description": "Feature extraction failed",
+                        "schema": {
+                            "$ref": "#/definitions/internal_server.APIError"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_server.APIError"
+                        }
+                    }
+                }
+            }
+        },
+        "/images/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ],
+                "description": "Returns metadata for a single image.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "images"
+                ],
+                "summary": "Get image by ID",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Image ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_server.ImageInfo"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid image id",
+                        "schema": {
+                            "$ref": "#/definitions/internal_server.APIError"
+                        }
+                    },
+                    "404": {
+                        "description": "Image not found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_server.APIError"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ],
+                "description": "Removes an image and its associated vectors and stats.",
+                "tags": [
+                    "images"
+                ],
+                "summary": "Delete image",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Image ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    },
+                    "400": {
+                        "description": "Invalid image id",
+                        "schema": {
+                            "$ref": "#/definitions/internal_server.APIError"
+                        }
+                    },
+                    "404": {
+                        "description": "Image not found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_server.APIError"
+                        }
+                    }
+                }
+            }
+        },
+        "/index/build": {
+            "post": {
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ],
+                "description": "Triggers an asynchronous index build for unindexed images. Poll /stats for progress.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "index"
+                ],
+                "summary": "Build index",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "default": 100000,
+                        "description": "Vectors per flush batch",
+                        "name": "batch_size",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "$ref": "#/definitions/internal_server.BuildIndexResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/search": {
+            "post": {
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ],
+                "description": "Uploads an image and returns the most similar images from the index.",
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "search"
+                ],
+                "summary": "Search similar images",
+                "parameters": [
+                    {
+                        "type": "file",
+                        "description": "Query image file",
+                        "name": "file",
+                        "in": "formData",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "default": 10,
+                        "description": "Number of results to return",
+                        "name": "count",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 64,
+                        "description": "Max Hamming distance threshold",
+                        "name": "distance",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 3,
+                        "description": "Number of inverted lists to probe",
+                        "name": "nprobe",
+                        "in": "formData"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_server.SearchResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Missing file field",
+                        "schema": {
+                            "$ref": "#/definitions/internal_server.APIError"
+                        }
+                    },
+                    "422": {
+                        "description": "Feature extraction failed",
+                        "schema": {
+                            "$ref": "#/definitions/internal_server.APIError"
+                        }
+                    },
+                    "500": {
+                        "description": "Search failed",
+                        "schema": {
+                            "$ref": "#/definitions/internal_server.APIError"
+                        }
+                    }
+                }
+            }
+        },
+        "/stats": {
+            "get": {
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ],
+                "description": "Returns image count, vector count, and unindexed count.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "system"
+                ],
+                "summary": "Database statistics",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_server.StatsResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/internal_server.APIError"
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "internal_server.APIError": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "type": "string",
+                    "example": "unauthorized"
+                }
+            }
+        },
+        "internal_server.AddImageResponse": {
+            "type": "object",
+            "properties": {
+                "descriptors": {
+                    "type": "integer",
+                    "example": 508
+                },
+                "id": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "path": {
+                    "type": "string",
+                    "example": "img001.webp"
+                }
+            }
+        },
+        "internal_server.BuildIndexResponse": {
+            "type": "object",
+            "properties": {
+                "status": {
+                    "type": "string",
+                    "example": "building"
+                }
+            }
+        },
+        "internal_server.ImageInfo": {
+            "type": "object",
+            "properties": {
+                "hash": {
+                    "type": "string",
+                    "example": "ABCD1234EFGH5678"
+                },
+                "id": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "indexed": {
+                    "type": "boolean"
+                },
+                "path": {
+                    "type": "string",
+                    "example": "/data/img001.webp"
+                },
+                "vector_count": {
+                    "type": "integer",
+                    "example": 508
+                }
+            }
+        },
+        "internal_server.ListImagesResponse": {
+            "type": "object",
+            "properties": {
+                "images": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_server.ImageInfo"
+                    }
+                },
+                "limit": {
+                    "type": "integer",
+                    "example": 20
+                },
+                "offset": {
+                    "type": "integer",
+                    "example": 0
+                }
+            }
+        },
+        "internal_server.SearchResponse": {
+            "type": "object",
+            "properties": {
+                "result": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_server.SearchResult"
+                    }
+                },
+                "time": {
+                    "type": "integer",
+                    "example": 101
+                }
+            }
+        },
+        "internal_server.SearchResult": {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "example": "/data/img001.webp"
+                },
+                "score": {
+                    "type": "number",
+                    "example": 93.17
+                }
+            }
+        },
+        "internal_server.StatsResponse": {
+            "type": "object",
+            "properties": {
+                "images": {
+                    "type": "integer",
+                    "example": 499
+                },
+                "unindexed": {
+                    "type": "integer",
+                    "example": 0
+                },
+                "vectors": {
+                    "type": "integer",
+                    "example": 253079
+                }
+            }
+        }
+    },
+    "securityDefinitions": {
+        "Bearer": {
+            "description": "Type \"Bearer\" followed by a space and the token.",
+            "type": "apiKey",
+            "name": "Authorization",
+            "in": "header"
+        }
+    }
+}

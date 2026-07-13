@@ -1,0 +1,9 @@
+/imseek
+*.exe
+*.test
+*.out
+*.prof
+
+data/
+imseek.toml
+.codegraph/

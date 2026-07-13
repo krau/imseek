@@ -1,0 +1,341 @@
+basePath: /api/v1
+definitions:
+  internal_server.APIError:
+    properties:
+      error:
+        example: unauthorized
+        type: string
+    type: object
+  internal_server.AddImageResponse:
+    properties:
+      descriptors:
+        example: 508
+        type: integer
+      id:
+        example: 1
+        type: integer
+      path:
+        example: img001.webp
+        type: string
+    type: object
+  internal_server.BuildIndexResponse:
+    properties:
+      status:
+        example: building
+        type: string
+    type: object
+  internal_server.ImageInfo:
+    properties:
+      hash:
+        example: ABCD1234EFGH5678
+        type: string
+      id:
+        example: 1
+        type: integer
+      indexed:
+        type: boolean
+      path:
+        example: /data/img001.webp
+        type: string
+      vector_count:
+        example: 508
+        type: integer
+    type: object
+  internal_server.ListImagesResponse:
+    properties:
+      images:
+        items:
+          $ref: '#/definitions/internal_server.ImageInfo'
+        type: array
+      limit:
+        example: 20
+        type: integer
+      offset:
+        example: 0
+        type: integer
+    type: object
+  internal_server.SearchResponse:
+    properties:
+      result:
+        items:
+          $ref: '#/definitions/internal_server.SearchResult'
+        type: array
+      time:
+        example: 101
+        type: integer
+    type: object
+  internal_server.SearchResult:
+    properties:
+      path:
+        example: /data/img001.webp
+        type: string
+      score:
+        example: 93.17
+        type: number
+    type: object
+  internal_server.StatsResponse:
+    properties:
+      images:
+        example: 499
+        type: integer
+      unindexed:
+        example: 0
+        type: integer
+      vectors:
+        example: 253079
+        type: integer
+    type: object
+info:
+  contact: {}
+  description: Image similarity search.
+    indexing.
+  title: Imseek API
+  version: "1.0"
+paths:
+  /health:
+    get:
+      description: Returns service health status.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - Bearer: []
+      summary: Health check
+      tags:
+      - system
+  /images:
+    get:
+      description: Returns a paginated list of image metadata.
+      parameters:
+      - default: 20
+        description: Items per page (1-100)
+        in: query
+        maximum: 100
+        minimum: 1
+        name: limit
+        type: integer
+      - default: 0
+        description: Number of items to skip
+        in: query
+        minimum: 0
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_server.ListImagesResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_server.APIError'
+      security:
+      - Bearer: []
+      summary: List images
+      tags:
+      - images
+    post:
+      consumes:
+      - multipart/form-data
+      description: Uploads an image, extracts ORB descriptors, and adds it to the
+        database. Rejects duplicates by content hash.
+      parameters:
+      - description: Image file (jpg/png/webp, max 50MB)
+        in: formData
+        name: file
+        required: true
+        type: file
+      - description: Custom path label for the image
+        in: formData
+        name: path
+        type: string
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/internal_server.AddImageResponse'
+        "400":
+          description: Missing file field
+          schema:
+            $ref: '#/definitions/internal_server.APIError'
+        "409":
+          description: Image already exists
+          schema:
+            $ref: '#/definitions/internal_server.APIError'
+        "422":
+          description: Feature extraction failed
+          schema:
+            $ref: '#/definitions/internal_server.APIError'
+        "500":
+          description: Internal error
+          schema:
+            $ref: '#/definitions/internal_server.APIError'
+      security:
+      - Bearer: []
+      summary: Upload image
+      tags:
+      - images
+  /images/{id}:
+    delete:
+      description: Removes an image and its associated vectors and stats.
+      parameters:
+      - description: Image ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses:
+        "204":
+          description: No content
+        "400":
+          description: Invalid image id
+          schema:
+            $ref: '#/definitions/internal_server.APIError'
+        "404":
+          description: Image not found
+          schema:
+            $ref: '#/definitions/internal_server.APIError'
+      security:
+      - Bearer: []
+      summary: Delete image
+      tags:
+      - images
+    get:
+      description: Returns metadata for a single image.
+      parameters:
+      - description: Image ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_server.ImageInfo'
+        "400":
+          description: Invalid image id
+          schema:
+            $ref: '#/definitions/internal_server.APIError'
+        "404":
+          description: Image not found
+          schema:
+            $ref: '#/definitions/internal_server.APIError'
+      security:
+      - Bearer: []
+      summary: Get image by ID
+      tags:
+      - images
+  /index/build:
+    post:
+      description: Triggers an asynchronous index build for unindexed images. Poll
+        /stats for progress.
+      parameters:
+      - default: 100000
+        description: Vectors per flush batch
+        in: query
+        name: batch_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            $ref: '#/definitions/internal_server.BuildIndexResponse'
+      security:
+      - Bearer: []
+      summary: Build index
+      tags:
+      - index
+  /search:
+    post:
+      consumes:
+      - multipart/form-data
+      description: Uploads an image and returns the most similar images from the index.
+      parameters:
+      - description: Query image file
+        in: formData
+        name: file
+        required: true
+        type: file
+      - default: 10
+        description: Number of results to return
+        in: formData
+        name: count
+        type: integer
+      - default: 64
+        description: Max Hamming distance threshold
+        in: formData
+        name: distance
+        type: integer
+      - default: 3
+        description: Number of inverted lists to probe
+        in: formData
+        name: nprobe
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_server.SearchResponse'
+        "400":
+          description: Missing file field
+          schema:
+            $ref: '#/definitions/internal_server.APIError'
+        "422":
+          description: Feature extraction failed
+          schema:
+            $ref: '#/definitions/internal_server.APIError'
+        "500":
+          description: Search failed
+          schema:
+            $ref: '#/definitions/internal_server.APIError'
+      security:
+      - Bearer: []
+      summary: Search similar images
+      tags:
+      - search
+  /stats:
+    get:
+      description: Returns image count, vector count, and unindexed count.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_server.StatsResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_server.APIError'
+      security:
+      - Bearer: []
+      summary: Database statistics
+      tags:
+      - system
+schemes:
+- http
+- https
+securityDefinitions:
+  Bearer:
+    description: Type "Bearer" followed by a space and the token.
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

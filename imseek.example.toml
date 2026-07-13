@@ -1,0 +1,35 @@
+# imseek configuration file
+# Place in the project root or specify with --config
+# Precedence: CLI flags > env vars (IMSEEK_*) > this file > defaults
+
+# Data directory: database, quantizer, index file
+data_dir = "data"
+
+# Index backend: local | milvus | pgvector
+backend = "local"
+
+[search]
+distance = 64 # max Hamming distance
+count = 10    # results to return
+k = 3         # KNN per descriptor
+nprobe = 3    # inverted lists to probe
+threads = 0   # search threads (0=auto)
+
+# Milvus backend (when backend = "milvus")
+[milvus]
+address = "localhost:19530"
+collection = "imseek"
+
+# pgvector backend (when backend = "pgvector")
+# Creates {table}_image / {table}_vector tables and an ANN index
+[pgvector]
+conn_string = "postgres://user:pass@localhost:5432/imseek?sslmode=disable"
+table = "imseek"
+index_type = "ivfflat"                                                     # ivfflat (fast build) | hnsw (better recall)
+# HNSW
+m = 16
+ef_construction = 64
+ef_search = 40
+# IVFFlat
+lists = 0   # 0 = auto from row count
+probes = 10 # lists to probe at query time
